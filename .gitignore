@@ -1,0 +1,22 @@
+# 生成物 —— build.mjs 每次跑出来的分镜本网页、版本留档、导演批注，不进版本库
+Output/
+
+# ★ 实跑时的工作目录：剧本原文、从剧本派生的分镜 JSON、LAYOUT 工程。
+#   ★★ 绝不能进版本库 —— 里头是第三方的剧本原文和台词（受版权保护的作品）。
+#   Skill 本体不依赖 work/。
+work/
+
+# 样张和反例都是从第三方剧本派生的（含原台词），同样不公开
+tests/
+
+# 本地备份、网盘同步冲突副本、Blender 自动备份
+*.bak*
+*bak-2026*
+*冲突文件*
+*.blend1
+
+node_modules/
+.env
+.DS_Store
+Thumbs.db
+desktop.ini

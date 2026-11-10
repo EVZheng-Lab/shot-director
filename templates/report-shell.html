@@ -1,0 +1,551 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>分镜本 — {{TITLE}}</title>
+<!--
+================================================================================
+  shot-director 静态外壳 —— 数据由 scripts/build.mjs 注入到底部 id="data" 的脚本块。
+  （注释里刻意不写占位符字面量：build.mjs 用 replace 只换第一处。）
+
+  数据契约（Agent 只写这份 JSON，不写 HTML）：
+  {
+    "meta": {
+      "title": "片名", "script": "剧本路径", "bible": "资产盘点 JSON 路径（ad-asset-bible 产出）",
+      "range": "这次分了哪几集/哪几场", "aspect": "9:16",
+      "stylePrefix":   "全局风格前缀（中文）。EV 11-07 定：所有提示词一律中文（给大陆用户，方便读改）",
+      "stylePrefixEn": "可选：英文版前缀，只给 Omni 的英文备用提示词用（Omni 官方只评估过英文）",
+      "version": 1,                   // 第几版。按导演批注改出新版时 +1，旧版 JSON 另存不覆盖
+      "changes": "这一版相对上一版改了什么（第 1 版可不写）"
+    },
+    "scenes": [{                      // 场 = 同一场景、同一批演员完成的一段或连续几段事件
+      "id": "1-1A",                   // 沿用资产盘点的场次号；一个场次被拆成几场时加 A/B/C
+      "bibleScene": "1-1",            // 对应资产盘点里的场次号（对账键）
+      "name": "一句话场名",
+      "loc": "@loc_…",                // 主地点资产 tag（可以是变体 tag）
+      "cast": ["@char_<人>_<服装>"],  // 演员批次：主要角色的服装资产 tag
+      "extras": ["群演说明"],          // 不建档的群演
+      "summary": "现在时，谁做了什么",
+      "splitReason": "为什么在这里切场",
+      "anchor": { "from": "起始原句（逐字）", "to": "结束原句（逐字）" },
+      "unsure": ["拿不准的判断"],
+      "continues": "可选：被集边界切开的同一场，写上一集末场的场号",
+      "stylePrefix": "可选：这一场覆盖全局前缀（例如日景改光线那一句），这一场的组都以它开头",
+      "stylePrefixEn": "可选：同上，英文版（给 Omni）",
+      "blocking": [{                  // 平面图（EV 11-09，03 第四节之三）：每一场必画；一个阵型一张，阵型变了另起一张
+        "id": "A", "name": "正院跪接圣旨", "area": "上 = 正厅，下 = 大门", "ratio": 1.3,   // ratio = 图的宽高比，狭长场地写 2
+        "marks": [{ "name": "踏道", "x": 0.3, "y": 0.02, "w": 0.4, "h": 0.12 }],           // 场地固定物
+        "top": [{ "who": "沈云卿", "x": 0.55, "y": 0.4, "face": "N", "to": [0.5, 0.15], "toFace": "N" }],  // 俯视站位，x 向右 y 向下（0–1）；to = 这段里走到哪
+        "cams": [{ "at": "1-1-G3 Shot01", "x": 0.95, "y": 0.42, "aim": "W", "fov": 50, "after": false }], // 这一场每个 Shot 都要有一台；after = 拍的是走位之后
+        "anchor": true,               // 站位锚：同一多人阵型跨两个以上镜头组时才标，必须写 prompt，相关组挂站位图
+        "prompt": "给 Blender MCP 的静态站位提示词（每台机位出一张站位图）"
+      }]
+    }],
+    "groups": [{                      // 镜头组 = 一次生成 = 表格一行
+      "id": "1-1A-G1", "scene": "1-1A",
+      "model": "omni | wan3 | h3 | sd20 | sd25",
+      "craft": "i2v（首帧生视频） | r2v（参考生视频）",
+      "dur": 10,                      // 生成时长（秒），不是剪辑取用时长
+      "assets": ["@tag"],             // 这一组用到的资产（含变体 tag）
+      "unbuilt": ["未建档的人/物"],    // 群演、一次性道具：如实列出
+      "refs": [{ "n": "@image1", "tag": "@tag" }, { "n": "@video1", "tag": "说明" }],
+      "lines": [{ "who": "角色", "text": "原文台词（字不能改，标点和断句可以改）", "note": "可选", "perf": "可选：演法，一句话（EV 11-08）" }],
+      "reactions": [{ "shot": "Shot02", "who": "听的人", "on": "听到了哪句" }],   // 有台词、两个以上角色的参考生视频组必填（或写 noReaction）
+      "noReaction": "可选：这组为什么不给反应镜头",
+      "reason": "派活理由：为什么是这个工艺/模型",
+      "frame":  { "mode": "single | grid", "prompt": "首帧生图提示词", "cell": "宫格取哪一格（grid 时必填）",
+                  "refs": ["生图时一起挂给 Gemini 的资产 tag（可选）"] },                                   // i2v 必填
+      "layout": { "level": "full | static | set", "prompt": "给 Blender MCP 的提示词" },                    // 要 LAYOUT 时填
+      "edge": { "first": { "subject": "主拍对象", "size": "中景", "angle": 0, "lr": ["左边的人", "右边的人"] },
+                "last":  { "size": "近景", "angle": 90, "lr": ["…"] } },   // 必填：首尾镜头，查组间衔接（03 第四节）
+      "shots": [{ "n": "Shot01", "size": "中景", "move": "固定 | 推 | 拉 | 摇 | 跟 | 手持 | 环绕 | 人名运镜…",          // 草图（EV 11-08），每个 Shot 一格，03 第七节
+                  "figs": [{ "who": "角色名", "pose": "stand（姿势库里的名字）", "face": "right|left|front|back|fl|fr", "x": 0.3, "s": 1 }],
+                  "props": [{ "name": "剑", "x": 0.5, "y": 0.7 }], "note": "可选：一句话说这个镜头在干什么" }],
+      "axisChange": "可选：确实要换边时写理由",
+      "textRisk": "可选：画面里有文字时写是什么字（页面标警告）",
+      "prompt": "视频提示词（中文）：带全局风格前缀、不带场号组号、挂了图的不写外观；镜头写成 Shot01/Shot02…",
+      "promptEn": "可选，只用于 Omni：同一条提示词的英文备用版（中文效果不好时换它）"
+    }]
+  }
+================================================================================
+-->
+<style>
+  :root{
+    --bg:#0f1113; --panel:#171a1d; --panel2:#1d2125; --border:#2a2f35;
+    --text:#e7e9ea; --dim:#9aa2a8; --faint:#6b7378;
+    --accent:#c8975a; --ok:#4ade80; --bad:#f87171;
+    --m-omni:#a78bfa; --m-wan3:#34d399; --m-h3:#fbbf24; --m-sd20:#60a5fa; --m-sd25:#f472b6;
+    --layout:#fb923c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  a{color:var(--accent)}
+  .wrap{margin:0;padding:20px 16px 80px}
+  /* 顶部标签页：资产盘点 / 分镜本（EV 11-09） */
+  .ptabs{display:flex;gap:4px;padding:10px 16px 0;border-bottom:1px solid var(--border);background:var(--panel)}
+  .ptab{appearance:none;border:1px solid transparent;border-bottom:none;background:transparent;color:var(--dim);font:inherit;font-size:14px;padding:8px 18px;border-radius:6px 6px 0 0;cursor:pointer;min-height:40px}
+  .ptab:hover{color:var(--text)}
+  .ptab[aria-selected="true"]{background:var(--bg);color:var(--accent);border-color:var(--border);margin-bottom:-1px;font-weight:600}
+  .ptab .k{color:var(--faint);font-size:12px;margin-left:6px;font-weight:400}
+  #bibleView iframe{display:block;width:100%;height:calc(100vh - 52px);border:0;background:#fff}
+  .bempty{padding:40px 16px;color:var(--dim)}
+  .tag.jump{cursor:pointer}
+  .tag.jump:hover{outline:1px solid var(--accent)}
+  header h1{margin:0 0 4px;font-size:22px}
+  .meta{color:var(--dim);font-size:13px;word-break:break-all}
+  .meta b{color:var(--text);font-weight:500}
+  .prefix{margin-top:10px;background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;padding:10px 12px;font-size:13px}
+  .prefix .row{display:flex;gap:8px;align-items:flex-start;margin:2px 0}
+  .prefix .lab{color:var(--faint);flex:0 0 auto;min-width:64px}
+  .prefix .txt{flex:1}
+
+  /* 筛选条 —— 制片主任模式：一次筛出同一模型的活集中做完 */
+  .bar{position:sticky;top:0;z-index:10;background:rgba(15,17,19,.96);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);margin:16px -16px 0;padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .chip{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;min-height:36px;display:inline-flex;align-items:center;gap:6px;transition:background .15s,border-color .15s}
+  .chip:hover{border-color:var(--dim)}
+  .chip[aria-pressed="true"]{background:var(--panel2);border-color:var(--c,var(--accent));box-shadow:inset 0 0 0 1px var(--c,var(--accent))}
+  .chip .dot{width:9px;height:9px;border-radius:50%;background:var(--c,var(--dim))}
+  .chip .n{color:var(--faint);font-variant-numeric:tabular-nums}
+  .sep{width:1px;height:22px;background:var(--border);margin:0 4px}
+  .bar input[type=search]{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;min-width:180px;flex:1 1 180px;max-width:280px;font-size:13px}
+  .btn{border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:6px;padding:7px 12px;font-size:13px;cursor:pointer;min-height:36px}
+  .btn:hover{background:rgba(200,151,90,.12)}
+  .status{color:var(--dim);font-size:12px;margin-left:auto}
+
+  /* 场 */
+  .scene{margin-top:26px}
+  .scene>.sh{background:var(--panel);border:1px solid var(--border);border-radius:8px 8px 0 0;padding:12px 14px}
+  .sid{font-family:ui-monospace,Consolas,monospace;color:var(--accent);font-weight:600;margin-right:8px}
+  .sname{font-weight:600}
+  .bmap{color:var(--faint);font-size:12px;margin-left:6px}
+  .sline{margin-top:6px;font-size:13px;color:var(--dim)}
+  .sline .k{color:var(--faint);margin-right:4px}
+  details.why{margin-top:6px;font-size:13px}
+  details.why summary{cursor:pointer;color:var(--dim)}
+  details.why .body{padding:6px 0 0 14px;color:var(--dim)}
+  .unsure{color:#fcd34d}
+
+  /* 镜头组行 */
+  .g{display:grid;grid-template-columns:150px minmax(0,1fr) 320px minmax(0,1.3fr) 260px;gap:14px;border:1px solid var(--border);border-top:none;background:var(--bg);padding:14px}
+  .g:last-child{border-radius:0 0 8px 8px}
+  .g.done{opacity:.45}
+  .g .gid{font-family:ui-monospace,Consolas,monospace;font-size:13px;color:var(--text)}
+  .badge{display:inline-block;border-radius:4px;padding:2px 8px;font-size:12px;font-weight:600;color:#0f1113;background:var(--c);margin:6px 4px 0 0}
+  .badge.o{background:transparent;color:var(--c);border:1px solid var(--c);font-weight:500}
+  .dur{font-size:13px;color:var(--dim);margin-top:6px}
+  .donebox{margin-top:10px;font-size:13px;color:var(--dim);display:flex;gap:6px;align-items:center;cursor:pointer;min-height:32px}
+  .donebox input{width:18px;height:18px;accent-color:var(--ok)}
+  .lab2{color:var(--faint);font-size:12px;margin:8px 0 3px}
+  .lab2:first-child{margin-top:0}
+  .tags{display:flex;flex-wrap:wrap;gap:5px}
+  .tag{font-size:12px;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:1px 7px}
+  .tag code{color:var(--dim);font-size:11px}
+  .tag.un{border-style:dashed;color:var(--dim)}
+  .refs{font-size:12px;color:var(--dim)}
+  .refs code{color:var(--text)}
+  .lines{margin:0;padding:0;list-style:none;font-size:13px}
+  .lines li{padding:2px 0}
+  .lines .who{color:var(--accent);margin-right:4px}
+  .lines .nt{color:var(--faint);font-size:12px}
+  .lines .perf{color:var(--dim);font-size:12px;padding-left:1em}
+  .reason{font-size:13px;color:var(--dim)}
+  .sketch{display:flex;flex-wrap:wrap;gap:8px}
+  .blk{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
+  .plans{display:flex;flex-wrap:wrap;gap:14px;flex:0 1 auto}
+  .plan{width:420px;max-width:100%;min-width:0}
+  .blkside{flex:1 1 360px;min-width:300px}
+  .plan .pnote{font-size:12px;color:var(--dim);margin-top:4px;line-height:1.5}
+  .anc{color:#22d3ee}
+  .plan .cam:hover path{fill-opacity:.4}
+  .g.flash{outline:2px solid #22d3ee;outline-offset:2px}
+  .pfig{cursor:zoom-in}
+  .zoom{position:fixed;inset:0;z-index:50;background:rgba(8,9,10,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;cursor:zoom-out}
+  .zoom .zt{color:var(--dim);font-size:13px;margin-bottom:10px}
+  .zoom svg{width:min(94vw,calc((100vh - 90px) * var(--r,1.3)),1400px)!important;height:auto!important;cursor:default}
+  .sk{flex:none;width:96px}
+  .sk.wide{width:152px}
+  .sknote{font-size:11px;color:var(--dim);line-height:1.4;margin-top:2px}
+  .pbox{background:var(--panel);border:1px solid var(--border);border-radius:6px;margin-bottom:10px}
+  .pbox:last-child{margin-bottom:0}
+  .ph{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px;color:var(--dim)}
+  .ph .t{flex:1}
+  .pbox.frame .ph .t{color:var(--m-omni)}
+  .pbox.lay .ph .t{color:var(--layout)}
+  .copy{border:1px solid var(--border);background:var(--panel2);color:var(--text);border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;min-height:30px}
+  .copy:hover{border-color:var(--dim)}
+  .copy.okd{border-color:var(--ok);color:var(--ok)}
+  pre{margin:0;padding:10px;white-space:pre-wrap;word-break:break-word;font:13px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;max-height:9.5em;overflow:hidden;position:relative}
+  pre.open{max-height:none}
+  .more{display:block;width:100%;border:none;border-top:1px solid var(--border);background:transparent;color:var(--faint);font-size:12px;padding:4px;cursor:pointer}
+  /* 批注列 —— Human in the loop：导演批，Agent 按批注改出下一版 */
+  .note textarea{width:100%;min-height:110px;resize:vertical;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px;font-size:13px;line-height:1.6;font-family:inherit}
+  .note textarea:focus{outline:none;border-color:var(--accent)}
+  .note.has textarea{border-color:#d97706}
+  .nst{font-size:12px;color:var(--faint);margin-top:4px;min-height:18px}
+  .nst.err{color:var(--bad)}
+  .reply{margin-top:6px;font-size:12px;color:var(--ok);background:rgba(74,222,128,.07);border:1px solid rgba(74,222,128,.25);border-radius:6px;padding:6px 8px}
+  .ver{display:inline-block;margin-left:8px;font-size:13px;font-weight:500;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:0 6px;vertical-align:middle}
+  .changes{margin-top:8px;font-size:13px;color:var(--dim)}
+  .empty{padding:40px;text-align:center;color:var(--faint)}
+  .legend{margin-top:10px;font-size:12px;color:var(--faint)}
+  @media (max-width:1500px){
+    .g{grid-template-columns:150px minmax(0,1fr) 320px minmax(0,1.3fr)}
+    .g .note{grid-column:1/-1}
+  }
+  @media (max-width:1150px){
+    .g{grid-template-columns:150px minmax(0,1fr) 320px}
+    .g .pcol{grid-column:1/-1}
+  }
+  @media (max-width:960px){
+    .g{grid-template-columns:1fr}
+    .status{margin-left:0;width:100%}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body>
+<nav class="ptabs" role="tablist" aria-label="页面">
+  <button class="ptab" role="tab" id="pt-bible" data-pt="bible">资产盘点<span class="k">副导演</span></button>
+  <button class="ptab" role="tab" id="pt-shots" data-pt="shots">分镜本<span class="k">分镜导演</span></button>
+</nav>
+<div id="bibleView" hidden></div>
+<div class="wrap" id="shotsView">
+  <header>
+    <h1 id="title"></h1>
+    <div class="meta" id="meta"></div>
+    <div class="prefix" id="prefix"></div>
+  </header>
+  <div class="bar" id="bar" role="toolbar" aria-label="筛选"></div>
+  <main id="main"></main>
+</div>
+<script type="application/json" id="data">{{DATA_JSON}}</script>
+<script type="application/json" id="bibleHtml">{{BIBLE_HTML}}</script>
+<script>{{POSES_JS}}</script>
+<script>
+var D = JSON.parse(document.getElementById('data').textContent);
+var MODELS = {
+  omni:{name:'Omni', c:'var(--m-omni)'},
+  wan3:{name:'Wan3.0', c:'var(--m-wan3)'},
+  h3:{name:'H3', c:'var(--m-h3)'},
+  sd20:{name:'SD2.0', c:'var(--m-sd20)'},
+  sd25:{name:'SD2.5', c:'var(--m-sd25)'}
+};
+var CRAFTS = { i2v:'首帧生视频', r2v:'参考生视频' };
+var LAYOUT_LV = { full:'完整 LAYOUT', static:'静态站位 + 机位', set:'只搭场景' };
+var NAMES = D.assetNames || {};
+// 草图：每个角色一个颜色（按全片第一次出现的顺序）
+var PALETTE = ['#60a5fa','#f472b6','#34d399','#fbbf24','#a78bfa','#f87171','#22d3ee','#a3e635'], FIGCOL = {};
+(D.groups || []).forEach(function(g){ (g.shots || []).forEach(function(sh){ (sh.figs || []).forEach(function(f){
+  if (f.who && !FIGCOL[f.who]) FIGCOL[f.who] = PALETTE[Object.keys(FIGCOL).length % PALETTE.length]; }); }); });
+function blockingBox(sc){
+  if (!(sc.blocking || []).length || !window.SketchKit) return '';
+  var col = function(n){ return FIGCOL[n] || '#9aa4ae'; };
+  var cards = sc.blocking.map(function(b){
+    var anchor = b.anchor === true || (b.anchor === undefined && !!b.prompt);
+    var used = (b.cams || []).map(function(c){ return SketchKit.camLabel(c.at); }).join('、');
+    return '<div class="plan"><div class="lab2">' + (anchor ? '<span class="anc">站位锚</span>' : '平面图') + ' · ' + esc(b.name) + '</div>' +
+      '<div class="pfig" title="点击放大">' + SketchKit.topView(b, { w: 420, colorOf: col }) + '</div>' +
+      (b.area ? '<div class="pnote">' + esc(b.area) + '</div>' : '') +
+      '<div class="pnote">机位：' + esc(used) + '（点图放大；点机位跳到镜头组）</div>' +
+      (anchor ? '<div class="pnote">这几组挂同一套 Blender 站位图（每台机位一张），站位不会在组和组之间漂。</div>' : '') + '</div>';
+  }).join('');
+  var side = sc.blocking.filter(function(b){ return b.anchor === true || (b.anchor === undefined && !!b.prompt); }).map(function(b){
+    return pbox('lay', 'LAYOUT · 站位锚“' + b.name + '” · 给 Blender MCP 的提示词', b.prompt);
+  }).join('');
+  return '<div class="blk"><div class="plans">' + cards + '</div>' + (side ? '<div class="blkside">' + side + '</div>' : '') + '</div>';
+}
+function sketchStrip(g){
+  if (!(g.shots || []).length || !window.SketchKit) return '';
+  var wide = /^16/.test(D.meta.aspect || ''), w = wide ? 152 : 96, h = wide ? 86 : 171;
+  return '<div class="lab2">草图</div><div class="sketch">' + g.shots.map(function(sh){
+    return '<div class="sk' + (wide ? ' wide' : '') + '" title="' + esc(sh.note || '') + '">' + SketchKit.frame(sh, { w: w, h: h, colorOf: function(n){ return FIGCOL[n] || '#9aa4ae'; } }) +
+      (sh.note ? '<div class="sknote">' + esc(sh.note) + '</div>' : '') + '</div>';
+  }).join('') + '</div>';
+}
+var KEY = 'shotdir:' + (D.meta.title || '') + ':done';
+
+function angName(a){ a = Math.abs(+a); return a <= 15 ? '正面' : a <= 60 ? '斜侧' : a <= 120 ? '侧面' : a <= 165 ? '斜背' : '背面'; }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function loadDone(){ try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e){ return {}; } }
+function saveDone(o){ try { localStorage.setItem(KEY, JSON.stringify(o)); } catch(e){} }
+var done = loadDone();
+
+var st = { models:{}, crafts:{}, layout:false, hideDone:false, noted:false, q:'' };
+var DOC = D.doc || D.meta.title;
+var VER = D.meta.version || 1;
+var notes = {}, online = false;
+var NKEY = 'shotdir:' + DOC + ':notes';
+function openNote(id){ var n = notes[id]; return !!(n && n.text && n.status !== 'done'); }
+function loadNotes(){
+  function local(){ try { notes = JSON.parse(localStorage.getItem(NKEY) || '{}'); } catch(e){ notes = {}; } }
+  if (location.protocol === 'file:') { local(); return Promise.resolve(); }
+  return fetch('/api/notes?doc=' + encodeURIComponent(DOC), {cache:'no-store'}).then(function(r){ if(!r.ok) throw 0; return r.json(); })
+    .then(function(j){ notes = j || {}; online = true; })
+    .catch(local);
+}
+var timers = {};
+function saveNote(id, text, stEl){
+  clearTimeout(timers[id]);
+  stEl.textContent = '待保存…'; stEl.classList.remove('err');
+  timers[id] = setTimeout(function(){
+    var mine = { text: text, ts: new Date().toISOString(), version: VER, status: 'open' };
+    if (!online) {
+      if (text) notes[id] = mine; else delete notes[id];
+      try { localStorage.setItem(NKEY, JSON.stringify(notes)); } catch(e){}
+      stEl.textContent = '只存在这台电脑的浏览器里（不是从分镜本服务打开的，Agent 读不到——用“复制全部批注”发给它）';
+      renderBar();
+      return;
+    }
+    // 先取最新再合并：Agent 可能刚往同一份文件里写了处理结果，直接整份覆盖会把它的回复冲掉
+    var url = '/api/notes?doc=' + encodeURIComponent(DOC);
+    fetch(url, {cache:'no-store'}).then(function(r){ return r.json(); }).then(function(latest){
+      latest = latest || {};
+      if (text) latest[id] = mine; else delete latest[id];
+      notes = latest;
+      return fetch(url, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(latest) });
+    }).then(function(r){ if(!r.ok) throw 0; stEl.textContent = '已保存 ' + new Date().toLocaleTimeString(); renderBar(); })
+      .catch(function(){ stEl.textContent = '保存失败，检查分镜本服务是否在运行'; stEl.classList.add('err'); });
+  }, 700);
+}
+
+function tagChip(t){
+  var nm = NAMES[t];
+  return '<span class="tag jump" data-asset="' + esc(t) + '" title="' + esc(t) + '（点击到资产盘点里看）">' + esc(nm || t) + (nm ? ' <code>' + esc(t) + '</code>' : '') + '</span>';
+}
+
+function copyText(txt, btn){
+  function ok(){ if(!btn) return; var o = btn.textContent; btn.textContent = '已复制'; btn.classList.add('okd'); setTimeout(function(){ btn.textContent = o; btn.classList.remove('okd'); }, 1200); }
+  if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(txt).then(ok, function(){ fallback(); }); }
+  else fallback();
+  function fallback(){ var ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); ok(); } catch(e){} ta.remove(); }
+}
+
+function pbox(cls, title, text){
+  return '<div class="pbox ' + cls + '"><div class="ph"><span class="t">' + title + '</span><button class="copy" data-copy>复制</button></div>'
+    + '<pre>' + esc(text) + '</pre><button class="more" hidden>展开全文</button></div>';
+}
+
+function groupHTML(g){
+  var m = MODELS[g.model] || {name:g.model, c:'var(--dim)'};
+  var h = '<div class="g' + (done[g.id] ? ' done' : '') + '" data-id="' + esc(g.id) + '">';
+  h += '<div><div class="gid">' + esc(g.id) + '</div>';
+  h += '<span class="badge" style="--c:' + m.c + '">' + esc(m.name) + '</span>';
+  h += '<span class="badge o" style="--c:var(--dim)">' + esc(CRAFTS[g.craft] || g.craft) + '</span>';
+  if (g.layout) h += '<span class="badge o" style="--c:var(--layout)">LAYOUT · ' + esc(LAYOUT_LV[g.layout.level] || g.layout.level) + '</span>';
+  if (g.frame && g.frame.mode === 'grid') h += '<span class="badge o" style="--c:var(--m-omni)">宫格 · ' + esc(g.frame.cell || '') + '</span>';
+  h += '<div class="dur">生成 ' + esc(g.dur) + ' 秒</div>';
+  if (g.edge) h += '<div class="dur">首 ' + esc(g.edge.first.size) + '·' + esc(angName(g.edge.first.angle)) + '<br>尾 ' + esc(g.edge.last.size) + '·' + esc(angName(g.edge.last.angle)) + '</div>';
+  if (g.textRisk) h += '<span class="badge o" style="--c:#f87171" title="' + esc(g.textRisk) + '">⚠ 有文字</span>';
+  h += '<label class="donebox"><input type="checkbox" data-done ' + (done[g.id] ? 'checked' : '') + '>已完成</label></div>';
+
+  h += '<div>';
+  h += '<div class="lab2">资产</div><div class="tags">' + (g.assets || []).map(tagChip).join('');
+  (g.unbuilt || []).forEach(function(u){ h += '<span class="tag un">' + esc(u) + '</span>'; });
+  h += '</div>';
+  if ((g.refs || []).length){
+    h += '<div class="lab2">挂载顺序</div><div class="refs">' + g.refs.map(function(r){ return '<code>' + esc(r.n) + '</code> ' + esc(NAMES[r.tag] || r.tag); }).join('　') + '</div>';
+  }
+  if ((g.lines || []).length){
+    h += '<div class="lab2">台词（原文）</div><ul class="lines">' + g.lines.map(function(l){
+      return '<li><span class="who">' + esc(l.who) + '</span>' + esc(l.text) + (l.note ? ' <span class="nt">（' + esc(l.note) + '）</span>' : '')
+        + (l.perf ? '<div class="perf">演法：' + esc(l.perf) + '</div>' : '') + '</li>';
+    }).join('') + '</ul>';
+  }
+  if ((g.reactions || []).length){
+    h += '<div class="lab2">反应镜头</div><ul class="lines">' + g.reactions.map(function(r){
+      return '<li><span class="who">' + esc(r.shot) + '</span>' + esc(r.who) + ' ← ' + esc(r.on || '') + '</li>';
+    }).join('') + '</ul>';
+  } else if (g.noReaction) {
+    h += '<div class="lab2">不给反应镜头</div><div class="reason">' + esc(g.noReaction) + '</div>';
+  }
+  h += '<div class="lab2">派活理由</div><div class="reason">' + esc(g.reason) + '</div>';
+  if (g.textRisk) h += '<div class="lab2" style="color:#f87171">⚠ 画面里有文字，有渲染失败的风险</div><div class="reason">' + esc(g.textRisk) + '</div>';
+  if (g.axisChange) h += '<div class="lab2">换边说明</div><div class="reason">' + esc(g.axisChange) + '</div>';
+  h += '</div>';
+
+  h += '<div class="skcol">' + sketchStrip(g) + '</div>';
+  h += '<div class="pcol">';
+  if (g.frame) h += pbox('frame', g.frame.mode === 'grid' ? '首帧 · 宫格生图提示词（取' + esc(g.frame.cell || '') + '）' : '首帧 · 生图提示词', g.frame.prompt);
+  if (g.layout) h += pbox('lay', 'LAYOUT · 给 Blender MCP 的提示词', g.layout.prompt);
+  h += pbox('vid', '视频提示词 · ' + esc(m.name), g.prompt);
+  if (g.promptEn) h += pbox('vid', '英文备用 · ' + esc(m.name) + '（中文效果不好时换它）', g.promptEn);
+  h += '</div>';
+  var n = notes[g.id] || {};
+  h += '<div class="note' + (openNote(g.id) ? ' has' : '') + '"><div class="lab2">导演批注</div>';
+  h += '<textarea data-note placeholder="写修改意见，自动保存。批完让 Agent 出下一版。" aria-label="' + esc(g.id) + ' 批注">' + esc(n.status === 'done' ? '' : (n.text || '')) + '</textarea>';
+  h += '<div class="nst"></div>';
+  if (n.status === 'done') h += '<div class="reply">✓ 第 ' + esc(n.doneIn || '') + ' 版已按批注修改<br>原批注：' + esc(n.text) + (n.reply ? '<br>改了：' + esc(n.reply) : '') + '</div>';
+  h += '</div></div>';
+  return h;
+}
+
+function match(g){
+  var anyM = Object.keys(st.models).some(function(k){ return st.models[k]; });
+  if (anyM && !st.models[g.model]) return false;
+  var anyC = Object.keys(st.crafts).some(function(k){ return st.crafts[k]; });
+  if (anyC && !st.crafts[g.craft]) return false;
+  if (st.layout && !g.layout) return false;
+  if (st.hideDone && done[g.id]) return false;
+  if (st.noted && !openNote(g.id)) return false;
+  if (st.q){
+    var blob = [g.id, g.prompt, g.reason, (g.lines||[]).map(function(l){return l.who + l.text;}).join(' '), (g.assets||[]).map(function(t){return t + (NAMES[t]||'');}).join(' ')].join(' ').toLowerCase();
+    if (blob.indexOf(st.q.toLowerCase()) < 0) return false;
+  }
+  return true;
+}
+
+function visible(){ return D.groups.filter(match); }
+
+function renderBar(){
+  var cnt = {}; D.groups.forEach(function(g){ cnt[g.model] = (cnt[g.model] || 0) + 1; });
+  var cc = {}; D.groups.forEach(function(g){ cc[g.craft] = (cc[g.craft] || 0) + 1; });
+  var nl = D.groups.filter(function(g){ return g.layout; }).length;
+  var h = '';
+  Object.keys(MODELS).forEach(function(k){
+    h += '<button class="chip" data-m="' + k + '" aria-pressed="' + (!!st.models[k]) + '" style="--c:' + MODELS[k].c + '"><span class="dot"></span>' + MODELS[k].name + ' <span class="n">' + (cnt[k] || 0) + '</span></button>';
+  });
+  h += '<span class="sep"></span>';
+  Object.keys(CRAFTS).forEach(function(k){
+    h += '<button class="chip" data-c="' + k + '" aria-pressed="' + (!!st.crafts[k]) + '">' + CRAFTS[k] + ' <span class="n">' + (cc[k] || 0) + '</span></button>';
+  });
+  h += '<button class="chip" data-l aria-pressed="' + st.layout + '" style="--c:var(--layout)">要 LAYOUT <span class="n">' + nl + '</span></button>';
+  h += '<button class="chip" data-h aria-pressed="' + st.hideDone + '">隐藏已完成</button>';
+  var nn = D.groups.filter(function(g){ return openNote(g.id); }).length;
+  h += '<button class="chip" data-n aria-pressed="' + st.noted + '" style="--c:#d97706">有批注 <span class="n">' + nn + '</span></button>';
+  h += '<input type="search" id="q" placeholder="搜台词、资产、组号…" value="' + esc(st.q) + '" aria-label="搜索">';
+  h += '<button class="btn" id="batch">复制筛出的视频提示词</button>';
+  h += '<button class="btn" id="exportNotes">复制全部批注</button>';
+  var v = visible().length, d = D.groups.filter(function(g){ return done[g.id]; }).length;
+  h += '<span class="status">显示 ' + v + ' / ' + D.groups.length + ' 组 · 已完成 ' + d + '</span>';
+  document.getElementById('bar').innerHTML = h;
+}
+
+function renderMain(){
+  var vis = visible(), byScene = {};
+  vis.forEach(function(g){ (byScene[g.scene] = byScene[g.scene] || []).push(g); });
+  var h = '';
+  D.scenes.forEach(function(s){
+    var gs = byScene[s.id]; if (!gs) return;
+    h += '<section class="scene"><div class="sh">';
+    h += '<span class="sid">' + esc(s.id) + '</span><span class="sname">' + esc(s.name) + '</span>';
+    if (s.bibleScene && s.bibleScene !== s.id) h += '<span class="bmap">（资产盘点场次 ' + esc(s.bibleScene) + '）</span>';
+    h += '<div class="sline"><span class="k">地点</span>' + esc(NAMES[s.loc] || s.loc) + '　<span class="k">演员</span>' + (s.cast || []).map(function(t){ return esc(NAMES[t] || t); }).join('、');
+    if ((s.extras || []).length) h += '　<span class="k">群演</span>' + s.extras.map(esc).join('、');
+    h += '</div><div class="sline">' + esc(s.summary) + '</div>';
+    h += '<details class="why"><summary>切分理由与原文锚点' + ((s.unsure || []).length ? '（有 ' + s.unsure.length + ' 条拿不准）' : '') + '</summary><div class="body">';
+    h += '<div>' + esc(s.splitReason) + '</div>';
+    if (s.anchor) h += '<div>起：' + esc(s.anchor.from) + '<br>止：' + esc(s.anchor.to) + '</div>';
+    (s.unsure || []).forEach(function(u){ h += '<div class="unsure">拿不准：' + esc(u) + '</div>'; });
+    h += '</div></details>' + blockingBox(s) + '</div>';
+    gs.forEach(function(g){ h += groupHTML(g); });
+    h += '</section>';
+  });
+  if (!h) h = '<div class="empty">没有符合筛选的镜头组</div>';
+  document.getElementById('main').innerHTML = h;
+  document.querySelectorAll('pre').forEach(function(p){
+    var more = p.nextElementSibling;
+    if (p.scrollHeight > p.clientHeight + 4) { more.hidden = false; }
+  });
+}
+
+function render(){ renderBar(); renderMain(); }
+
+document.getElementById('title').innerHTML = '分镜本 · ' + esc(D.meta.title) + '<span class="ver">第 ' + VER + ' 版</span>';
+document.getElementById('meta').innerHTML =
+  (D.meta.range ? '<b>' + esc(D.meta.range) + '</b>　' : '') + '画幅 <b>' + esc(D.meta.aspect || '') + '</b>　' + D.scenes.length + ' 场 · ' + D.groups.length + ' 个镜头组'
+  + '<br>剧本：' + esc(D.meta.script) + '<br>资产盘点：' + esc(D.meta.bible)
+  + (D.meta.changes ? '<div class="changes">这一版改了：' + esc(D.meta.changes) + '</div>' : '');
+(function(){
+  var h = '<div class="row"><span class="lab">风格前缀</span><span class="txt">' + esc(D.meta.stylePrefix) + '</span><button class="copy" data-copytext="' + esc(D.meta.stylePrefix) + '">复制</button></div>';
+  if (D.meta.stylePrefixEn) h += '<div class="row"><span class="lab">英文版</span><span class="txt">' + esc(D.meta.stylePrefixEn) + '</span><button class="copy" data-copytext="' + esc(D.meta.stylePrefixEn) + '">复制</button></div>';
+  h += '<div class="legend">每条视频提示词已经带上前缀，直接复制整条即可。英文版只给 Omni 的英文备用提示词用。</div>';
+  document.getElementById('prefix').innerHTML = h;
+})();
+
+document.addEventListener('click', function(e){
+  var t = e.target;
+  if (t.closest('.cam[data-at]')) {
+    var zm = document.querySelector('.zoom'); if (zm) zm.remove();
+    var gid = t.closest('.cam[data-at]').dataset.at.split(/\s+/)[0], el = document.querySelector('.g[data-id="' + gid + '"]');
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('flash'); setTimeout(function(){ el.classList.remove('flash'); }, 1600); }
+    return;
+  }
+  if (t.closest('.zoom')) { t.closest('.zoom').remove(); return; }
+  if (t.closest('.pfig')) {
+    var src = t.closest('.pfig').querySelector('svg'), vb = src.viewBox.baseVal, z = document.createElement('div');
+    z.className = 'zoom'; z.style.setProperty('--r', vb.width / vb.height);
+    z.innerHTML = '<div class="zt">' + esc(t.closest('.plan').querySelector('.lab2').textContent) + '　点空白处或按 Esc 关闭；点机位跳到镜头组</div>' + src.outerHTML;
+    document.body.appendChild(z); return;
+  }
+  if (t.closest('[data-m]')) { var k = t.closest('[data-m]').dataset.m; st.models[k] = !st.models[k]; render(); return; }
+  if (t.closest('[data-c]')) { var c = t.closest('[data-c]').dataset.c; st.crafts[c] = !st.crafts[c]; render(); return; }
+  if (t.closest('[data-l]')) { st.layout = !st.layout; render(); return; }
+  if (t.closest('[data-h]')) { st.hideDone = !st.hideDone; render(); return; }
+  if (t.closest('[data-n]')) { st.noted = !st.noted; render(); return; }
+  if (t.id === 'exportNotes') {
+    var ls = D.groups.filter(function(g){ return openNote(g.id); }).map(function(g){ return '【' + g.id + '】' + notes[g.id].text; });
+    copyText('《' + DOC + '》第 ' + VER + ' 版 · 导演批注（' + ls.length + ' 条）\n' + ls.join('\n'), t); return;
+  }
+  if (t.id === 'batch') {
+    var txt = visible().map(function(g){ return '—— ' + g.id + ' · ' + (MODELS[g.model] || {}).name + ' · ' + g.dur + ' 秒 ——\n' + g.prompt; }).join('\n\n');
+    copyText(txt, t); return;
+  }
+  if (t.hasAttribute('data-copy')) { copyText(t.closest('.pbox').querySelector('pre').textContent, t); return; }
+  if (t.hasAttribute('data-copytext')) { copyText(t.getAttribute('data-copytext'), t); return; }
+  if (t.classList.contains('more')) { var p = t.previousElementSibling; p.classList.toggle('open'); t.textContent = p.classList.contains('open') ? '收起' : '展开全文'; return; }
+});
+/* ===== 顶部标签页：资产盘点 / 分镜本 ===== */
+var BIBLE = JSON.parse(document.getElementById('bibleHtml').textContent || '""');
+function bibleFrame(){
+  var v = document.getElementById('bibleView'), f = v.querySelector('iframe');
+  if (!f && BIBLE) { f = document.createElement('iframe'); f.title = '资产盘点'; f.srcdoc = BIBLE; v.appendChild(f); }
+  else if (!BIBLE && !v.innerHTML) v.innerHTML = '<div class="bempty">这份分镜本没有嵌入资产盘点页面（build 时没找到，见 meta.bibleHtml）。</div>';
+  return f;
+}
+function showPage(k){
+  document.getElementById('bibleView').hidden = k !== 'bible';
+  document.getElementById('shotsView').hidden = k !== 'shots';
+  document.querySelectorAll('.ptab').forEach(function(b){ b.setAttribute('aria-selected', b.dataset.pt === k ? 'true' : 'false'); });
+  if (k === 'bible') bibleFrame();
+  try { history.replaceState(null, '', k === 'bible' ? '#bible' : '#shots'); } catch(e){}
+}
+function jumpAsset(tag){
+  showPage('bible');
+  var f = bibleFrame(); if (!f) return;
+  function go(){
+    var d = f.contentDocument; if (!d) return;
+    var hit = Array.prototype.find.call(d.querySelectorAll('.tag,.vt'), function(el){ return el.textContent.trim() === tag; });
+    if (!hit) { var base = tag.replace(/_[^_]+$/, ''); hit = Array.prototype.find.call(d.querySelectorAll('.tag,.vt'), function(el){ return el.textContent.trim() === base; }); }
+    if (!hit) return;
+    var sect = hit.closest('.sect'), tb = sect && d.getElementById('tab-' + sect.id.replace(/^sect-/, ''));
+    if (tb && tb.getAttribute('aria-selected') !== 'true') tb.click();
+    var row = hit.closest('tr,.bio,.card') || hit;
+    setTimeout(function(){
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      var o = row.style.outline; row.style.outline = '2px solid #c8975a'; setTimeout(function(){ row.style.outline = o; }, 1800);
+    }, 60);
+  }
+  if (f.contentDocument && f.contentDocument.readyState === 'complete' && f.contentDocument.body && f.contentDocument.body.childElementCount) go();
+  else f.addEventListener('load', go, { once: true });
+}
+document.addEventListener('click', function(e){
+  var pt = e.target.closest('.ptab'); if (pt) { showPage(pt.dataset.pt); window.scrollTo(0, 0); return; }
+  var a = e.target.closest('.tag.jump[data-asset]'); if (a) { jumpAsset(a.dataset.asset); }
+});
+showPage(location.hash === '#shots' ? 'shots' : 'bible');
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape') { var z = document.querySelector('.zoom'); if (z) z.remove(); } });
+document.addEventListener('change', function(e){
+  if (e.target.hasAttribute('data-done')) {
+    var id = e.target.closest('.g').dataset.id;
+    if (e.target.checked) done[id] = 1; else delete done[id];
+    saveDone(done); render();
+  }
+});
+document.addEventListener('input', function(e){
+  if (e.target.hasAttribute('data-note')) {
+    var box = e.target.closest('.note'), nid = e.target.closest('.g').dataset.id;
+    box.classList.toggle('has', !!e.target.value.trim());
+    saveNote(nid, e.target.value.trim(), box.querySelector('.nst'));
+    return;
+  }
+  if (e.target.id === 'q') { st.q = e.target.value; renderMain(); var v = visible().length; var s = document.querySelector('.status'); if (s) s.textContent = '显示 ' + v + ' / ' + D.groups.length + ' 组'; }
+});
+loadNotes().then(render);
+</script>
+</body></html>
